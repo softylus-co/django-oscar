@@ -255,13 +255,22 @@ class AbstractOrder(models.Model):
                         "date_placed": self.date_placed.isoformat(),
                         "branch_id": branch_id,
                         "branch_name": self.store.name,
-                        "items": self.basket.lines.count(),
+                        # Read off the order rather than the basket behind
+                        # it: orders made by scripts, fixtures and seeds have
+                        # no basket at all, and dereferencing it raised an
+                        # AttributeError that the except below swallowed --
+                        # so the vendor was never told about those orders.
+                        "items": self.lines.count(),
                         "items_test": 2,
-                        "user": {
-                            "id": self.user.id,
-                            "email": self.user.email,
-                            "full_name": self.user.get_full_name(),
-                        }
+                        "user": (
+                            {
+                                "id": self.user.id,
+                                "email": self.user.email,
+                                "full_name": self.user.get_full_name(),
+                            }
+                            if self.user_id
+                            else None
+                        ),
                     }
                 }
             }
