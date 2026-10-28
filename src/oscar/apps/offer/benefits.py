@@ -185,6 +185,7 @@ class AbsoluteDiscountBenefit(Benefit):
         # spreading the discount is a policy decision that may not apply
 
         # Apply discount equally amongst them
+        line_discounts = []
         applied_discount = D("0.00")
         last_line_idx = len(lines_to_discount) - 1
         for i, (line, price, qty) in enumerate(lines_to_discount):
@@ -198,8 +199,28 @@ class AbsoluteDiscountBenefit(Benefit):
                 line_discount = self.round(
                     ((price * qty) / affected_items_total) * discount, basket.currency
                 )
-            apply_discount(line, line_discount, qty, offer)
+            line_discounts.append(line_discount)
             applied_discount += line_discount
+
+        # The shares above are rounded down, so the last line collects every
+        # line's leftover cents. When the discount covers (nearly) all of the
+        # matching items, that can be more than the last line costs -- and a
+        # line never goes below zero, so the excess was silently lost: a
+        # 100 SAR coupon on a 45 SAR basket left 0.01 to pay. Hand any excess
+        # back to the earlier lines, which all have room for it.
+        caps = [price * qty for __, price, qty in lines_to_discount]
+        excess = max(D("0.00"), line_discounts[-1] - caps[-1])
+        line_discounts[-1] -= excess
+        for i in range(last_line_idx):
+            if excess <= 0:
+                break
+            extra = min(excess, caps[i] - line_discounts[i])
+            if extra > 0:
+                line_discounts[i] += extra
+                excess -= extra
+
+        for (line, price, qty), line_discount in zip(lines_to_discount, line_discounts):
+            apply_discount(line, line_discount, qty, offer)
 
         return BasketDiscount(discount)
 
